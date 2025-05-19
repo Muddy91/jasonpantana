@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive 3D Graph - No Floor Shadows</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(to bottom, #2c3e50, #1a252f); /* Subtle gradient background */
+            color: #e0e0e0;
+        }
+        canvas { display: block; }
+        #tooltip {
+            position: absolute;
+            padding: 12px;
+            background: rgba(30, 30, 30, 0.9);
+            color: white;
+            border-radius: 10px;
+            pointer-events: none;
+            display: none;
+            font-size: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            z-index: 100;
+            max-width: 320px;
+            border: 1px solid #555;
+        }
+        #tooltip h4 {
+            margin-top: 0;
+            margin-bottom: 8px;
+            font-size: 15px;
+            color: #66ccff;
+            font-weight: 700;
+        }
+        #tooltip h5 {
+            margin-top: 10px;
+            margin-bottom: 5px;
+            font-size: 11px;
+            color: #aaa;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        #tooltip ul {
+            margin: 5px 0 0 0;
+            padding-left: 18px;
+            list-style-type: none;
+        }
+        #tooltip li {
+            margin-bottom: 4px;
+            font-size: 11px;
+            color: #ccc;
+        }
+        #controls-container {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            padding: 20px;
+            background-color: rgba(45, 55, 65, 0.9);
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.35);
+            color: #e8e8e8;
+            z-index: 10;
+            width: 220px;
+        }
+        #controls-container h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 18px;
+            border-bottom: 1px solid #667788;
+            padding-bottom: 8px;
+            font-weight: 700;
+        }
+        .control-group {
+            margin-bottom: 15px;
+        }
+        .control-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 13px;
+            font-weight: 400;
+        }
+        .control-group input[type="range"] {
+            width: 100%;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 8px;
+            background: #334455;
+            outline: none;
+            border-radius: 4px;
+        }
+        .control-group input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #66ccff;
+            cursor: pointer;
+            border-radius: 50%;
+            border: 2px solid #2c3e50;
+        }
+        .control-group input[type="range"]::-moz-range-thumb {
+            width: 14px;
+            height: 14px;
+            background: #66ccff;
+            cursor: pointer;
+            border-radius: 50%;
+            border: 2px solid #2c3e50;
+        }
+        .control-group input[type="color"] {
+            width: 100%;
+            height: 30px;
+            padding: 2px;
+            border-radius: 5px;
+            border: 1px solid #556677;
+            background-color: #334455;
+        }
+         .control-group input[type="checkbox"] {
+            margin-right: 8px;
+            vertical-align: middle;
+            width: 15px;
+            height: 15px;
+        }
+        .node-label, .edge-label {
+            color: #f0f0f0;
+            font-size: 10px;
+            background-color: rgba(0,0,0,0.7);
+            padding: 2px 6px;
+            border-radius: 4px;
+            max-width: 130px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            user-select: none;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .edge-label {
+            font-style: italic;
+            font-size: 9px;
+        }
+
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="tooltip"></div>
+    <div id="controls-container">
+        <h3>Graph Controls</h3>
+        <div class="control-group">
+            <label for="nodeSize">Node Size:</label>
+            <input type="range" id="nodeSize" min="0.1" max="2" step="0.05" value="0.6">
+        </div>
+        <div class="control-group">
+            <label for="nodeColor">Node Color:</label>
+            <input type="color" id="nodeColor" value="#4da6ff">
+        </div>
+        <div class="control-group">
+            <label for="showLabels">Show Labels:</label>
+            <input type="checkbox" id="showLabels" checked>
+        </div>
+         <div class="control-group">
+            <label for="layoutSpread">Layout Spread:</label>
+            <input type="range" id="layoutSpread" min="5" max="40" step="1" value="18">
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/renderers/CSS2DRenderer.js"></script>
+
+    <script type="module">
+        // --- Data ---
+        const dataString = `
+            (Mh9iE1FJqC)-[hasValue]->(Teaching Excellence), (Mh9iE1FJqC)-[isPartOfOrganization]->(Call Action), (Mh9iE1FJqC)-[hasWorkIdentity]->(Social Media Professional), (Mh9iE1FJqC)-[hasActivity]->(posting stories), (Mh9iE1FJqC)-[hasActivity]->(Ad Campaign), (Mh9iE1FJqC)-[hasGoal]->(Campaign Performance Goal: Monitor campaign performance for clicks and search volume), (Mh9iE1FJqC)-[hasRelationship]->(Business Relationship), (Mh9iE1FJqC)-[hasRelationship]->(Business Relationship), (Mh9iE1FJqC)-[hasActivity]->(Google Search: Using plus symbols before keywords for broad match modifier in Google search), (Mh9iE1FJqC)-[hasActivity]->(Google Search: Using plus symbols before keywords for broad match modifier in Google search), (Mh9iE1FJqC)-[hasActivity]->(Google Display Advertising: Image and interactive ads appearing on Google partner sites), (Mh9iE1FJqC)-[hasActivity]->(Google Display Advertising: Image and interactive ads appearing on Google partner sites), (Mh9iE1FJqC)-[hasActivity]->(YouTube Ads: Video advertising on YouTube platform), (Mh9iE1FJqC)-[hasActivity]->(YouTube Ads: Video advertising on YouTube platform), (Mh9iE1FJqC)-[hasActivity]->(YouTube Ads: Video advertising on YouTube platform), (Mh9iE1FJqC)-[isPartOfOrganization]->(Google My Business: Business listing with address, pictures, and contact information on Google search), (Mh9iE1FJqC)-[hasActivity]->(Google My Business: Business listing with address, pictures, and contact information on Google search), (Mh9iE1FJqC)-[isPartOfOrganization]->(Google My Business: Business listing with address, pictures, and contact information on Google search), (Mh9iE1FJqC)-[hasActivity]->(Google My Business: Business listing with address, pictures, and contact information on Google search), (Mh9iE1FJqC)-[hasActivity]->(Local Service Ads: They are not new for Google, but they are new for this industry, and it's we've seen a good boost for seller intent leads using those.), (Mh9iE1FJqC)-[hasActivity]->(Local Service Ads: They are not new for Google, but they are new for this industry, and it's we've seen a good boost for seller intent leads using those.), (Mh9iE1FJqC)-[hasActivity]->(Remarketing: Re-advertising to previous website visitors through various Google platforms), (Mh9iE1FJqC)-[hasActivity]->(Remarketing: Re-advertising to previous website visitors through various Google platforms), (Mh9iE1FJqC)-[hasActivity]->(Remarketing: Re-advertising to previous website visitors through various Google platforms), (Mh9iE1FJqC)-[hasValue]->(High Dollar Productivity: Focus on high-value activities while automating simple tasks), (Mh9iE1FJqC)-[hasActivity]->(Building Relationships: Building relationships through conversations to help people achieve their goals), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Professional), (Mh9iE1FJqC)-[isPartOfOrganization]->(Google), (Mh9iE1FJqC)-[isPartOfOrganization]->(Google), (Mh9iE1FJqC)-[hasPassion]->(Music), (Mh9iE1FJqC)-[hasPassion]->(Music), (Mh9iE1FJqC)-[hasActivity]->(Making calls), (Mh9iE1FJqC)-[hasActivity]->(Texting), (Mh9iE1FJqC)-[hasActivity]->(Emailing), (Mh9iE1FJqC)-[hasExperience]->(Time management experience), (Mh9iE1FJqC)-[isPartOfOrganization]->(Google Local Services Ads), (Mh9iE1FJqC)-[isPartOfOrganization]->(Google Local Services Ads), (Mh9iE1FJqC)-[ownsObject]->(Google Local Services Ads), (Mh9iE1FJqC)-[isPartOfOrganization]->(Google Local Services Ads), (Mh9iE1FJqC)-[isPartOfOrganization]->(Google Local Services Ads), (Mh9iE1FJqC)-[isPartOfOrganization]->(Google Local Services Ads), (Mh9iE1FJqC)-[hasActivity]->(Listening Tool: Tool for monitoring and engaging with social media conversations), (Mh9iE1FJqC)-[hasWorkIdentity]->(Social Media Manager), (Mh9iE1FJqC)-[hasWorkIdentity]->(Social Media Manager), (Mh9iE1FJqC)-[hasActivity]->(sales automation: Automating repetitious and tedious tasks in sales processes to create consistency in action and reactions), (Mh9iE1FJqC)-[hasActivity]->(sales automation: Automating repetitious and tedious tasks in sales processes to create consistency in action and reactions), (Mh9iE1FJqC)-[hasActivity]->(sales automation: Automating repetitious and tedious tasks in sales processes to create consistency in action and reactions), (Mh9iE1FJqC)-[hasActivity]->(marketing automation: Automating outbound marketing activities to generate inbound conversations), (Mh9iE1FJqC)-[hasActivity]->(marketing automation: Automating outbound marketing activities to generate inbound conversations), (Mh9iE1FJqC)-[hasActivity]->(marketing automation: Automating outbound marketing activities to generate inbound conversations), (Mh9iE1FJqC)-[hasValue]->(Authenticity), (Mh9iE1FJqC)-[hasValue]->(Authenticity), (Mh9iE1FJqC)-[hasSkill]->(Marketing Strategy), (Mh9iE1FJqC)-[hasSkill]->(MarketingSkill), (Mh9iE1FJqC)-[hasSkill]->(MarketingSkill), (Mh9iE1FJqC)-[hasSkill]->(MarketingSkill), (Mh9iE1FJqC)-[hasSkill]->(MarketingSkill), (Mh9iE1FJqC)-[hasSkill]->(MarketingSkill), (Mh9iE1FJqC)-[hasSkill]->(MarketingSkill), (Mh9iE1FJqC)-[hasSkill]->(MarketingSkill), (Mh9iE1FJqC)-[hasSkill]->(MarketingSkill), (Mh9iE1FJqC)-[hasSkill]->(MarketingSkill), (Mh9iE1FJqC)-[hasSkill]->(MarketingSkill), (Mh9iE1FJqC)-[hasSkill]->(MarketingSkill), (Mh9iE1FJqC)-[hasSkill]->(MarketingSkill), (Mh9iE1FJqC)-[hasSkill]->(MarketingSkill), (Mh9iE1FJqC)-[hasValue]->(Smart Marketing Made Easy), (Mh9iE1FJqC)-[hasCreatedWork]->(Marketing Edge), (Mh9iE1FJqC)-[hasCreatedWork]->(Marketing Edge), (Mh9iE1FJqC)-[hasCreatedWork]->(Marketing Edge), (Mh9iE1FJqC)-[hasCreatedWork]->(Marketing Edge), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[hasActivity]->(real estate referral), (Mh9iE1FJqC)-[experiencedLifeEvent]->(Career Transition to Real Estate), (Mh9iE1FJqC)-[experiencedLifeEvent]->(Career Transition to Real Estate), (Mh9iE1FJqC)-[experiencedLifeEvent]->(Career Transition to Real Estate), (Mh9iE1FJqC)-[experiencedLifeEvent]->(Career Transition to Real Estate), (Mh9iE1FJqC)-[experiencedLifeEvent]->(Career Transition to Real Estate), (Mh9iE1FJqC)-[experiencedLifeEvent]->(Career Transition to Real Estate), (Mh9iE1FJqC)-[hasPersonalGoal]->(Helping Others Succeed), (Mh9iE1FJqC)-[hasPersonalGoal]->(Helping Others Succeed), (Mh9iE1FJqC)-[hasPersonalGoal]->(Helping Others Succeed), (Mh9iE1FJqC)-[hasPersonalGoal]->(Helping Others Succeed), (Mh9iE1FJqC)-[hasPersonalGoal]->(Helping Others Succeed), (Mh9iE1FJqC)-[hasValue]->(Innovation), (Mh9iE1FJqC)-[hasValue]->(Innovation), (Mh9iE1FJqC)-[hasPsychologicalConcept]->(scale problem), (Mh9iE1FJqC)-[hasPassion]->(Marketing), (Mh9iE1FJqC)-[hasSkill]->(Marketing), (Mh9iE1FJqC)-[hasPassion]->(Marketing), (Mh9iE1FJqC)-[hasSkill]->(Marketing), (Mh9iE1FJqC)-[hasActivity]->(Marketing), (Mh9iE1FJqC)-[hasSkill]->(Marketing), (Mh9iE1FJqC)-[hasSkill]->(Marketing), (Mh9iE1FJqC)-[hasSkill]->(Marketing), (Mh9iE1FJqC)-[hasPassion]->(Marketing), (Mh9iE1FJqC)-[hasSkill]->(Marketing), (Mh9iE1FJqC)-[hasSkill]->(Marketing), (Mh9iE1FJqC)-[hasPassion]->(Marketing), (Mh9iE1FJqC)-[hasSkill]->(Marketing), (Mh9iE1FJqC)-[hasPassion]->(Marketing), (Mh9iE1FJqC)-[hasPassion]->(Marketing), (Mh9iE1FJqC)-[hasSkill]->(Marketing), (Mh9iE1FJqC)-[hasSkill]->(Marketing), (Mh9iE1FJqC)-[hasSkill]->(Marketing), (Mh9iE1FJqC)-[hasSkill]->(Marketing), (Mh9iE1FJqC)-[hasSkill]->(Marketing), (Mh9iE1FJqC)-[hasPassion]->(Marketing), (Mh9iE1FJqC)-[hasSkill]->(Marketing), (Mh9iE1FJqC)-[hasActivity]->(Sales), (Mh9iE1FJqC)-[hasSkill]->(Automation), (Mh9iE1FJqC)-[hasActivity]->(Keynote Presentation), (Mh9iE1FJqC)-[hasActivity]->(Webinar), (Mh9iE1FJqC)-[hasSkill]->(Real Estate Coaching), (Mh9iE1FJqC)-[hasSkill]->(Real Estate Coaching), (Mh9iE1FJqC)-[hasSkill]->(Real Estate Coaching), (Mh9iE1FJqC)-[hasSkill]->(Real Estate Coaching), (Mh9iE1FJqC)-[hasSkill]->(Real Estate Coaching), (Mh9iE1FJqC)-[hasSkill]->(Real Estate Coaching), (Mh9iE1FJqC)-[hasSkill]->(Real Estate Coaching), (Mh9iE1FJqC)-[hasWorkIdentity]->(Marketing Coach), (Mh9iE1FJqC)-[hasActivity]->(Coaching), (Mh9iE1FJqC)-[hasActivity]->(Coaching), (Mh9iE1FJqC)-[isPartOfOrganization]->(Sprout), (Mh9iE1FJqC)-[isPartOfOrganization]->(Instagram), (Mh9iE1FJqC)-[isPartOfOrganization]->(Instagram), (Mh9iE1FJqC)-[isPartOfOrganization]->(Instagram), (Mh9iE1FJqC)-[isPartOfOrganization]->(Instagram), (Mh9iE1FJqC)-[isPartOfOrganization]->(Instagram), (Mh9iE1FJqC)-[isPartOfOrganization]->(Instagram), (Mh9iE1FJqC)-[isPartOfOrganization]->(Instagram), (Mh9iE1FJqC)-[isPartOfOrganization]->(Instagram), (Mh9iE1FJqC)-[isPartOfOrganization]->(Instagram), (Mh9iE1FJqC)-[isPartOfOrganization]->(Instagram), (Mh9iE1FJqC)-[isPartOfOrganization]->(Instagram), (Mh9iE1FJqC)-[isPartOfOrganization]->(Instagram), (Mh9iE1FJqC)-[isPartOfOrganization]->(Instagram), (Mh9iE1FJqC)-[isPartOfOrganization]->(Instagram), (Mh9iE1FJqC)-[isPartOfOrganization]->(Instagram), (Mh9iE1FJqC)-[isPartOfOrganization]->(Instagram), (Mh9iE1FJqC)-[isPartOfOrganization]->(Instagram), (Mh9iE1FJqC)-[hasWorkIdentity]->(Digital Content Creator), (Mh9iE1FJqC)-[hasWorkIdentity]->(Digital Content Creator), (Mh9iE1FJqC)-[hasWorkIdentity]->(Digital Content Creator), (Mh9iE1FJqC)-[hasWorkIdentity]->(Digital Content Creator), (Mh9iE1FJqC)-[hasWorkIdentity]->(Digital Content Creator), (Mh9iE1FJqC)-[hasWorkIdentity]->(Digital Content Creator), (Mh9iE1FJqC)-[hasWorkIdentity]->(Digital Content Creator), (Mh9iE1FJqC)-[hasWorkIdentity]->(Digital Content Creator), (Mh9iE1FJqC)-[hasWorkIdentity]->(Digital Content Creator), (Mh9iE1FJqC)-[hasWorkIdentity]->(Digital Content Creator), (Mh9iE1FJqC)-[hasSkill]->(PublicSpeakingSkill), (Mh9iE1FJqC)-[hasSkill]->(PublicSpeakingSkill), (Mh9iE1FJqC)-[hasSkill]->(PublicSpeakingSkill), (Mh9iE1FJqC)-[hasSkill]->(PublicSpeakingSkill), (Mh9iE1FJqC)-[hasSkill]->(PublicSpeakingSkill), (Mh9iE1FJqC)-[hasSkill]->(PublicSpeakingSkill), (Mh9iE1FJqC)-[hasSkill]->(PublicSpeakingSkill), (Mh9iE1FJqC)-[hasSkill]->(PublicSpeakingSkill), (Mh9iE1FJqC)-[hasPersonalGoal]->(AI Marketing Academy), (Mh9iE1FJqC)-[hasCreatedWork]->(AI Marketing Academy), (Mh9iE1FJqC)-[hasActivity]->(AI Marketing Academy), (Mh9iE1FJqC)-[hasPersonalGoal]->(AI Marketing Academy), (Mh9iE1FJqC)-[hasActivity]->(AI Marketing Academy), (Mh9iE1FJqC)-[hasActivity]->(AI Marketing Academy), (Mh9iE1FJqC)-[hasExperience]->(Marketing Edge Seminar), (Mh9iE1FJqC)-[hasActivity]->(Marketing Edge Seminar), (Mh9iE1FJqC)-[hasActivity]->(Marketing Edge Seminar), (Mh9iE1FJqC)-[hasActivity]->(Marketing Edge Seminar), (Mh9iE1FJqC)-[hasCreatedWork]->(This Week in Marketing), (Mh9iE1FJqC)-[hasCreatedWork]->(This Week in Marketing), (Mh9iE1FJqC)-[hasCreatedWork]->(This Week in Marketing), (Mh9iE1FJqC)-[hasCreatedWork]->(This Week in Marketing), (Mh9iE1FJqC)-[hasCreatedWork]->(This Week in Marketing), (Mh9iE1FJqC)-[hasCreatedWork]->(This Week in Marketing), (Mh9iE1FJqC)-[hasCreatedWork]->(This Week in Marketing), (Mh9iE1FJqC)-[hasCreatedWork]->(This Week in Marketing), (Mh9iE1FJqC)-[hasCreatedWork]->(This Week in Marketing), (Mh9iE1FJqC)-[hasCreatedWork]->(This Week in Marketing), (Mh9iE1FJqC)-[hasCreatedWork]->(This Week in Marketing), (Mh9iE1FJqC)-[hasCreatedWork]->(This Week in Marketing), (Mh9iE1FJqC)-[hasCreatedWork]->(This Week in Marketing), (Mh9iE1FJqC)-[hasCreatedWork]->(This Week in Marketing), (Mh9iE1FJqC)-[hasCreatedWork]->(This Week in Marketing), (Mh9iE1FJqC)-[hasCreatedWork]->(This Week in Marketing), (Mh9iE1FJqC)-[hasCreatedWork]->(This Week in Marketing), (Mh9iE1FJqC)-[hasCreatedWork]->(This Week in Marketing), (Mh9iE1FJqC)-[hasActivity]->(Scheduling), (Mh9iE1FJqC)-[hasActivity]->(Real Estate Advertising), (Mh9iE1FJqC)-[hasActivity]->(Buyer Campaigns), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[isPartOfOrganization]->(Coldwell Banker), (Mh9iE1FJqC)-[hasWorkIdentity]->(Marketing Strategist), (Mh9iE1FJqC)-[hasWorkIdentity]->(Marketing Strategist), (Mh9iE1FJqC)-[hasWorkIdentity]->(Marketing Strategist), (Mh9iE1FJqC)-[hasWorkIdentity]->(Marketing Strategist), (Mh9iE1FJqC)-[hasWorkIdentity]->(Marketing Strategist), (Mh9iE1FJqC)-[hasActivity]->(Content Scheduling), (Mh9iE1FJqC)-[ownsObject]->(Gain app: A scheduling tool with content approval processes and Instagram publishing capabilities), (Mh9iE1FJqC)-[hasExperience]->(Referral Business Experience: Referral business feels better and easier due to trust transfer), (Mh9iE1FJqC)-[isPartOfOrganization]->(Google_Ads), (Mh9iE1FJqC)-[isPartOfOrganization]->(YouTube), (Mh9iE1FJqC)-[isPartOfOrganization]->(YouTube), (Mh9iE1FJqC)-[isPartOfOrganization]->(YouTube), (Mh9iE1FJqC)-[isPartOfOrganization]->(YouTube), (Mh9iE1FJqC)-[hasActivity]->(Social Media Marketing), (Mh9iE1FJqC)-[hasActivity]->(Direct Mail), (Mh9iE1FJqC)-[hasActivity]->(repurposing content), (Mh9iE1FJqC)-[hasActivity]->(TweetScreenshotting: screenshot a tweet), (Mh9iE1FJqC)-[hasCreatedWork]->(Captions), (Mh9iE1FJqC)-[hasActivity]->(Instagram saving activity: Using Instagram's save feature to organize posts into albums), (Mh9iE1FJqC)-[isPartOfOrganization]->(Success Summit 2020), (Mh9iE1FJqC)-[hasExperience]->(Resort home lead experience), (Mh9iE1FJqC)-[isPartOfOrganization]->(Real Estate Industry), (Mh9iE1FJqC)-[isPartOfOrganization]->(Real Estate Industry), (Mh9iE1FJqC)-[hasSkill]->(PPC_Expertise), (Mh9iE1FJqC)-[hasSkill]->(Google_Advertising_Expertise), (Mh9iE1FJqC)-[hasWorkIdentity]->(PPC_Expert), (Mh9iE1FJqC)-[hasExperience]->(Lead lifespan experience: The lifespan of the lead is somewhere between up to 2 years), (Mh9iE1FJqC)-[hasExperience]->(Lead lifespan experience: The lifespan of the lead is somewhere between up to 2 years), (Mh9iE1FJqC)-[hasRelationship]->(Agent-client relationship), (Mh9iE1FJqC)-[hasExperience]->(Pay Per Click Experience: Pay per click advertising system where advertisers pay when someone clicks on their ad), (Mh9iE1FJqC)-[hasExperience]->(Instagram Insights Experience: Learning about Instagram insights time zone being in Pacific Standard Time), (Mh9iE1FJqC)-[hasValue]->(Learning Value), (Mh9iE1FJqC)-[hasActivity]->(Phone Usage), (Mh9iE1FJqC)-[hasActivity]->(Teaching Seminar), (Mh9iE1FJqC)-[hasExperience]->(Lead Management Experience: Teaching seminars about lead intent and scoring in real estate), (Mh9iE1FJqC)-[hasSkill]->(Lead Scoring), (Mh9iE1FJqC)-[hasLocation]->(Florida), (Mh9iE1FJqC)-[hasLocation]->(North Carolina), (Mh9iE1FJqC)-[hasLocation]->(South Carolina), (Mh9iE1FJqC)-[hasLocation]->(Kentucky), (Mh9iE1FJqC)-[hasCreatedWork]->(highlights video), (Mh9iE1FJqC)-[hasExperience]->(Algorithm Update: Changes in content reach and distribution due to platform updates), (Mh9iE1FJqC)-[hasValue]->(Shared Interests: Following people with shared interests and common values), (Mh9iE1FJqC)-[hasBelief]->(Following Strategy Belief: One should follow people with shared interests and values rather than following indiscriminately), (Mh9iE1FJqC)-[hasActivity]->(data entry), (Mh9iE1FJqC)-[hasActivity]->(call handling), (Mh9iE1FJqC)-[ownsObject]->(CRM), (Mh9iE1FJqC)-[ownsObject]->(CRM), (Mh9iE1FJqC)-[hasBelief]->(Belief about Facebook's data collection practices: Facebook gets some demographic information from third parties rather than direct user data), (Mh9iE1FJqC)-[hasBelief]->(Belief about Google's data collection practices: Google collects demographic information primarily from its own services and partners), (Mh9iE1FJqC)-[hasActivity]->(Reporting), (Mh9iE1FJqC)-[hasActivity]->(Listening), (Mh9iE1FJqC)-[hasBelief]->(Content creation and platform optimization belief: Create content and optimize it for distribution based on platform uniqueness), (Mh9iE1FJqC)-[hasValue]->(Customer service), (Mh9iE1FJqC)-[hasExperience]->(Online property search: 98-99% of people search for properties online), (Mh9iE1FJqC)-[hasBelief]->(Keyword Strategy: Use long tail specific phrases and avoid short, unclear, or general phrases with double meanings), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Expert), (Mh9iE1FJqC)-[hasActivity]->(Keyword Optimization), (Mh9iE1FJqC)-[hasSkill]->(Keyword Optimization), (Mh9iE1FJqC)-[hasExperience]->(Platform Engagement Experience: Experience of increased post visibility due to platform engagement), (Mh9iE1FJqC)-[hasWorkIdentity]->(Business Account), (Mh9iE1FJqC)-[hasWorkIdentity]->(Creator Account), (Mh9iE1FJqC)-[hasValue]->(Data Privacy), (Mh9iE1FJqC)-[hasExperience]->(Advertising Experience: Experience with Facebook and Google Ads platforms regarding area targeting restrictions), (Mh9iE1FJqC)-[isPartOfOrganization]->(Social Media Platforms), (Mh9iE1FJqC)-[hasBelief]->(Content Strategy: Same content can be reused across different platforms with platform-specific adaptations), (Mh9iE1FJqC)-[hasActivity]->(Content Strategy: Same content can be reused across different platforms with platform-specific adaptations), (Mh9iE1FJqC)-[hasCreatedWork]->(Content Strategy: Same content can be reused across different platforms with platform-specific adaptations), (Mh9iE1FJqC)-[hasExperience]->(Agent Sabotage Experience: Experience with agents calling other agents attempting sabotage), (Mh9iE1FJqC)-[hasExperience]->(Google Budget Experience: Experience with setting weekly bid budget and paying for delivered connections), (Mh9iE1FJqC)-[isPartOfOrganization]->(Facebook), (Mh9iE1FJqC)-[isPartOfOrganization]->(Facebook), (Mh9iE1FJqC)-[isPartOfOrganization]->(Facebook), (Mh9iE1FJqC)-[isPartOfOrganization]->(Facebook), (Mh9iE1FJqC)-[isPartOfOrganization]->(Facebook), (Mh9iE1FJqC)-[isPartOfOrganization]->(Facebook), (Mh9iE1FJqC)-[isPartOfOrganization]->(Facebook), (Mh9iE1FJqC)-[isPartOfOrganization]->(Facebook), (Mh9iE1FJqC)-[isPartOfOrganization]->(Facebook), (Mh9iE1FJqC)-[isPartOfOrganization]->(Facebook), (Mh9iE1FJqC)-[hasExperience]->(Facebook targeting experience: Cannot target below 15 miles in special ad categories), (Mh9iE1FJqC)-[hasExperience]->(Google targeting experience: Allows targeting at city level, sometimes as small as a zip code), (Mh9iE1FJqC)-[hasActivity]->(Social Media Management: Managing and analyzing social media content and engagement), (Mh9iE1FJqC)-[hasSkill]->(Social Media Management: Managing and analyzing social media content and engagement), (Mh9iE1FJqC)-[hasActivity]->(Social Media Management: Managing and analyzing social media content and engagement), (Mh9iE1FJqC)-[hasSkill]->(Social Media Management: Managing and analyzing social media content and engagement), (Mh9iE1FJqC)-[ownsObject]->(Automation Tool), (Mh9iE1FJqC)-[hasExperience]->(Privacy and Transparency Experience: Impact of privacy protection and transparency frameworks on real estate agents' communications), (Mh9iE1FJqC)-[hasBelief]->(Call tracking belief: Tracking whether phone calls are being picked up), (Mh9iE1FJqC)-[hasActivity]->(Google Display Network Ads), (Mh9iE1FJqC)-[hasPsychologicalConcept]->(Branding: Being visible, being in front of people and building relationships), (Mh9iE1FJqC)-[hasActivity]->(Branding: Being visible, being in front of people and building relationships), (Mh9iE1FJqC)-[hasLocation]->(Local Marketplace), (Mh9iE1FJqC)-[hasActivity]->(Social Media Usage: Professional social media engagement), (Mh9iE1FJqC)-[hasActivity]->(Social Media Usage: Professional social media engagement), (Mh9iE1FJqC)-[hasBelief]->(Strategic Social Media Usage Belief: Belief in structured and purposeful social media engagement), (Mh9iE1FJqC)-[hasActivity]->(Speaking), (Mh9iE1FJqC)-[hasActivity]->(Speaking), (Mh9iE1FJqC)-[hasActivity]->(Speaking), (Mh9iE1FJqC)-[hasActivity]->(Speaking), (Mh9iE1FJqC)-[hasActivity]->(Speaking), (Mh9iE1FJqC)-[hasActivity]->(Speaking), (Mh9iE1FJqC)-[hasActivity]->(paid ads management), (Mh9iE1FJqC)-[isPartOfOrganization]->(Facebook groups), (Mh9iE1FJqC)-[hasExperience]->(Local Service Ads Setup Experience: Invasive process requiring background check and social security number), (Mh9iE1FJqC)-[hasActivity]->(Background Check), (Mh9iE1FJqC)-[hasActivity]->(Campaign), (Mh9iE1FJqC)-[hasSkill]->(AAA Formula: A coaching methodology consisting of Acknowledge, Ask, and Adopt steps), (Mh9iE1FJqC)-[hasValue]->(Consultative Approach), (Mh9iE1FJqC)-[hasPsychologicalConcept]->(Search Matching Concept: Understanding of exact and modified broad match concepts in search queries), (Mh9iE1FJqC)-[hasActivity]->(YouTube Content Creation), (Mh9iE1FJqC)-[hasActivity]->(YouTube Content Creation), (Mh9iE1FJqC)-[hasActivity]->(YouTube Content Creation), (Mh9iE1FJqC)-[hasActivity]->(Commenting Back), (Mh9iE1FJqC)-[hasActivity]->(Message Responding), (Mh9iE1FJqC)-[hasSkill]->(Hashtag Strategy: Using hashtags with less than a million occurrences and including essential industry-specific tags), (Mh9iE1FJqC)-[hasSkill]->(Hashtag Strategy: Using hashtags with less than a million occurrences and including essential industry-specific tags), (Mh9iE1FJqC)-[hasSkill]->(Engagement Strategy), (Mh9iE1FJqC)-[hasWorkIdentity]->(Social Media Marketer), (Mh9iE1FJqC)-[hasValue]->(Consistency), (Mh9iE1FJqC)-[hasRelationship]->(Jesse), (Mh9iE1FJqC)-[hasExperience]->(Helping Experience: Helping agents with Google-related questions), (Mh9iE1FJqC)-[hasSkill]->(Google Advertising), (Mh9iE1FJqC)-[hasExperience]->(Experience with Google Algorithms: Experience with Google's conversion optimization algorithms and bid automation), (Mh9iE1FJqC)-[hasExperience]->(broad match explanation), (Mh9iE1FJqC)-[hasActivity]->(Instagram story), (Mh9iE1FJqC)-[hasActivity]->(Ask Me Anything), (Mh9iE1FJqC)-[hasPsychologicalConcept]->(Social Media Engagement), (Mh9iE1FJqC)-[hasActivity]->(Content Reuse), (Mh9iE1FJqC)-[hasExperience]->(Hashtag Performance Experience: Decreased performance in explore feed and hashtag reach), (Mh9iE1FJqC)-[hasSkill]->(SEO), (Mh9iE1FJqC)-[hasActivity]->(YouTube video creation), (Mh9iE1FJqC)-[ownsObject]->(Two Buddy), (Mh9iE1FJqC)-[hasExperience]->(retail store experience: Customer interaction experience in retail stores involving greeting and offering assistance), (Mh9iE1FJqC)-[hasSkill]->(Conversion Tracking), (Mh9iE1FJqC)-[hasSkill]->(Conversion Tracking), (Mh9iE1FJqC)-[hasSkill]->(Web Analytics), (Mh9iE1FJqC)-[isPartOfOrganization]->(Google Tag Manager), (Mh9iE1FJqC)-[ownsObject]->(Google Tag Manager), (Mh9iE1FJqC)-[isPartOfOrganization]->(Google Analytics), (Mh9iE1FJqC)-[isPartOfOrganization]->(Google Analytics), (Mh9iE1FJqC)-[ownsObject]->(Google Analytics), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Agent), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Agent), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Agent), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Agent), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Agent), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Agent), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Agent), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Agent), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Agent), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Agent), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Agent), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Agent), (Mh9iE1FJqC)-[hasActivity]->(Email Campaigns), (Mh9iE1FJqC)-[hasActivity]->(Text Campaigns), (Mh9iE1FJqC)-[hasBelief]->(Belief about YouTube-Google monetization connection: YouTube monetization works closely with Google, affecting SEO and keyword performance), (Mh9iE1FJqC)-[hasValue]->(Relationship-based business value: Focus on relationships over transactions in business), (Mh9iE1FJqC)-[hasExperience]->(Client Interaction: Story about clients calling an agent for builder meeting representation), (Mh9iE1FJqC)-[isPartOfOrganization]->(Builder), (Mh9iE1FJqC)-[hasActivity]->(Lead Generation: Online lead generation through TCPA compliant forms), (Mh9iE1FJqC)-[hasActivity]->(Lead Generation: Online lead generation through TCPA compliant forms), (Mh9iE1FJqC)-[hasActivity]->(Lead Generation: Online lead generation through TCPA compliant forms), (Mh9iE1FJqC)-[hasActivity]->(Lead Generation: Online lead generation through TCPA compliant forms), (Mh9iE1FJqC)-[hasActivity]->(Lead Follow Up: Following up with leads through calls, texts, and emails), (Mh9iE1FJqC)-[hasWorkIdentity]->(Marketing Presence: Being recognized and visible in marketing efforts), (Mh9iE1FJqC)-[hasExperience]->(Content Analysis Experience: Experience in analyzing social media engagement and content performance), (Mh9iE1FJqC)-[hasActivity]->(Social Media Engagement: Exchange of currency from a social media algorithmic standpoint through likes, sharing, commenting, and DMing), (Mh9iE1FJqC)-[hasPsychologicalConcept]->(Social Media Engagement: Exchange of currency from a social media algorithmic standpoint through likes, sharing, commenting, and DMing), (Mh9iE1FJqC)-[hasActivity]->(Social Media Engagement: Exchange of currency from a social media algorithmic standpoint through likes, sharing, commenting, and DMing), (Mh9iE1FJqC)-[hasActivity]->(Social Media Engagement: Exchange of currency from a social media algorithmic standpoint through likes, sharing, commenting, and DMing), (Mh9iE1FJqC)-[hasActivity]->(Social Media Engagement: Exchange of currency from a social media algorithmic standpoint through likes, sharing, commenting, and DMing), (Mh9iE1FJqC)-[hasActivity]->(Social Media Engagement: Exchange of currency from a social media algorithmic standpoint through likes, sharing, commenting, and DMing), (Mh9iE1FJqC)-[hasActivity]->(Social Media Engagement: Exchange of currency from a social media algorithmic standpoint through likes, sharing, commenting, and DMing), (Mh9iE1FJqC)-[hasActivity]->(Social Media Engagement: Exchange of currency from a social media algorithmic standpoint through likes, sharing, commenting, and DMing), (Mh9iE1FJqC)-[hasValue]->(Reciprocity: The practice of exchanging things with others for mutual benefit), (Mh9iE1FJqC)-[hasWorkIdentity]->(Sales Agent), (Mh9iE1FJqC)-[hasActivity]->(Customer Outreach: Multi-channel outreach including ringless voicemail, text sequences, and phone calls), (Mh9iE1FJqC)-[hasGoal]->(Conversion Goal: Goals related to conversion in advertising campaigns), (Mh9iE1FJqC)-[isPartOfOrganization]->(Census Flow Mapper), (Mh9iE1FJqC)-[isPartOfOrganization]->(Census Flow Mapper), (Mh9iE1FJqC)-[hasGoal]->(Generate Buyer Leads: Focus on getting buyer leads as roughly 2/3 of buyers are sellers), (Mh9iE1FJqC)-[hasExperience]->(Generate Buyer Leads: Focus on getting buyer leads as roughly 2/3 of buyers are sellers), (Mh9iE1FJqC)-[hasBelief]->(Home buyer-seller connection belief: People searching for homes to buy are likely potential sellers), (Mh9iE1FJqC)-[hasBelief]->(Privacy is a growing trend), (Mh9iE1FJqC)-[hasPsychologicalConcept]->(Marketing consent requirement), (Mh9iE1FJqC)-[hasValue]->(Marketing compliance and consent), (Mh9iE1FJqC)-[hasExperience]->(Tom Ferry Success Summit), (Mh9iE1FJqC)-[hasExperience]->(Tom Ferry Success Summit), (Mh9iE1FJqC)-[hasExperience]->(Tom Ferry Success Summit), (Mh9iE1FJqC)-[hasExperience]->(Tom Ferry Success Summit), (Mh9iE1FJqC)-[hasExperience]->(Tom Ferry Success Summit), (Mh9iE1FJqC)-[hasPersonalGoal]->(Helping Agents Succeed), (Mh9iE1FJqC)-[hasPersonalGoal]->(Helping Agents Succeed), (Mh9iE1FJqC)-[hasPersonalGoal]->(Helping Agents Succeed), (Mh9iE1FJqC)-[hasPersonalGoal]->(Helping Agents Succeed), (Mh9iE1FJqC)-[hasPersonalGoal]->(Helping Agents Succeed), (Mh9iE1FJqC)-[hasPersonalGoal]->(Helping Agents Succeed), (Mh9iE1FJqC)-[isPartOfOrganization]->(Zillow), (Mh9iE1FJqC)-[isPartOfOrganization]->(National Association of Realtors), (Mh9iE1FJqC)-[hasExperience]->(Neighborhood visit: 43% of people drive to see the neighborhood as their first activity), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Public Speaking), (Mh9iE1FJqC)-[hasSkill]->(Digital Strategy), (Mh9iE1FJqC)-[hasSkill]->(Digital Strategy), (Mh9iE1FJqC)-[hasSkill]->(Digital Strategy), (Mh9iE1FJqC)-[hasValue]->(Education), (Mh9iE1FJqC)-[hasValue]->(Education), (Mh9iE1FJqC)-[hasValue]->(Education), (Mh9iE1FJqC)-[hasValue]->(Education), (Mh9iE1FJqC)-[hasValue]->(Education), (Mh9iE1FJqC)-[hasValue]->(Empowerment), (Mh9iE1FJqC)-[hasPassion]->(Teaching and Coaching), (Mh9iE1FJqC)-[hasCreatedWork]->(Podcast), (Mh9iE1FJqC)-[hasExperience]->(Direct Communication: Direct communication through DM, phone call, or text showing higher intent), (Mh9iE1FJqC)-[hasActivity]->(Property viewing: Meeting to view properties or get consultation), (Mh9iE1FJqC)-[hasActivity]->(Property viewing: Meeting to view properties or get consultation), (Mh9iE1FJqC)-[hasExperience]->(Speaking at Tom Ferry Success Summit), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[isPartOfOrganization]->(Village Real Estate), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Content Creator), (Mh9iE1FJqC)-[hasWorkIdentity]->(Content Creator), (Mh9iE1FJqC)-[hasWorkIdentity]->(Content Creator), (Mh9iE1FJqC)-[hasWorkIdentity]->(Content Creator), (Mh9iE1FJqC)-[hasWorkIdentity]->(Content Creator), (Mh9iE1FJqC)-[hasWorkIdentity]->(Content Creator), (Mh9iE1FJqC)-[hasWorkIdentity]->(Content Creator), (Mh9iE1FJqC)-[hasWorkIdentity]->(Content Creator), (Mh9iE1FJqC)-[hasWorkIdentity]->(Content Creator), (Mh9iE1FJqC)-[hasWorkIdentity]->(Content Creator), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasPassion]->(Teaching), (Mh9iE1FJqC)-[hasValue]->(Continuous Learning), (Mh9iE1FJqC)-[hasValue]->(Continuous Learning), (Mh9iE1FJqC)-[hasValue]->(Continuous Learning), (Mh9iE1FJqC)-[hasValue]->(Continuous Learning), (Mh9iE1FJqC)-[hasValue]->(Continuous Learning), (Mh9iE1FJqC)-[hasValue]->(Continuous Learning), (Mh9iE1FJqC)-[hasValue]->(Continuous Learning), (Mh9iE1FJqC)-[hasValue]->(Continuous Learning), (Mh9iE1FJqC)-[hasValue]->(Continuous Learning), (Mh9iE1FJqC)-[hasValue]->(Continuous Learning), (Mh9iE1FJqC)-[hasValue]->(Continuous Learning), (Mh9iE1FJqC)-[hasValue]->(Continuous Learning), (Mh9iE1FJqC)-[hasValue]->(Continuous Learning), (Mh9iE1FJqC)-[hasValue]->(Continuous Learning), (Mh9iE1FJqC)-[hasValue]->(Continuous Learning), (Mh9iE1FJqC)-[hasValue]->(Continuous Learning), (Mh9iE1FJqC)-[hasValue]->(Continuous Learning), (Mh9iE1FJqC)-[hasValue]->(Continuous Learning), (Mh9iE1FJqC)-[hasValue]->(Continuous Learning), (Mh9iE1FJqC)-[hasValue]->(Continuous Learning), (Mh9iE1FJqC)-[hasValue]->(Helping Others), (Mh9iE1FJqC)-[hasValue]->(Helping Others), (Mh9iE1FJqC)-[hasValue]->(Helping Others), (Mh9iE1FJqC)-[hasValue]->(Helping Others), (Mh9iE1FJqC)-[hasValue]->(Helping Others), (Mh9iE1FJqC)-[hasValue]->(Helping Others), (Mh9iE1FJqC)-[hasValue]->(Helping Others), (Mh9iE1FJqC)-[hasValue]->(Helping Others), (Mh9iE1FJqC)-[hasValue]->(Helping Others), (Mh9iE1FJqC)-[hasValue]->(Helping Others), (Mh9iE1FJqC)-[hasValue]->(Helping Others), (Mh9iE1FJqC)-[hasValue]->(Helping Others), (Mh9iE1FJqC)-[hasValue]->(Helping Others), (Mh9iE1FJqC)-[hasValue]->(Helping Others), (Mh9iE1FJqC)-[hasValue]->(Helping Others), (Mh9iE1FJqC)-[hasValue]->(Helping Others), (Mh9iE1FJqC)-[hasValue]->(Helping Others), (Mh9iE1FJqC)-[hasValue]->(Helping Others), (Mh9iE1FJqC)-[hasValue]->(Helping Others), (Mh9iE1FJqC)-[hasBelief]->(Belief in personal autonomy and anonymity), (Mh9iE1FJqC)-[hasActivity]->(Real estate search activity), (Mh9iE1FJqC)-[hasExperience]->(Experience with call tracking systems), (Mh9iE1FJqC)-[hasExperience]->(Advertisement Experience: 6 second non-skippable bumper ads), (Mh9iE1FJqC)-[hasPsychologicalConcept]->(Frequency Illusion: An effect where seeing something through multiple channels creates the illusion of increased frequency of exposure), (Mh9iE1FJqC)-[hasExperience]->(Marketing Experience: Experience with marketing, including inbound inquiries and outbound outreach), (Mh9iE1FJqC)-[hasExperience]->(Marketing Experience: Experience with marketing, including inbound inquiries and outbound outreach), (Mh9iE1FJqC)-[hasExperience]->(Marketing Experience: Experience with marketing, including inbound inquiries and outbound outreach), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasLocation]->(Nashville), (Mh9iE1FJqC)-[hasActivity]->(Time Management Activity: Engaging with activities during lunch and dedicating 15 minutes at night for engagement), (Mh9iE1FJqC)-[usesStressManagement]->(Scheduling Technique: Setting alarms and scheduling specific time slots for activities), (Mh9iE1FJqC)-[isPartOfOrganization]->(Company), (Mh9iE1FJqC)-[hasActivity]->(Testing: Testing trends and conducting 30, 60, 90 day testing periods), (Mh9iE1FJqC)-[hasExperience]->(Elevator Social Interaction: Social interaction scenario in an elevator where someone is ignored), (Mh9iE1FJqC)-[hasActivity]->(IGTV posting: Uses maximum available hashtags for IGTV content), (Mh9iE1FJqC)-[hasActivity]->(blog posting: Uses limited hashtags focused on real estate and Tom Ferry blog), (Mh9iE1FJqC)-[hasSkill]->(Search Term Teaching: Knowledge of search term modifications including broad match, phrase match, and exact match), (Mh9iE1FJqC)-[hasExperience]->(Search Term Explanation: Explaining search term modification symbols to viewers), (Mh9iE1FJqC)-[hasValue]->(Collaboration), (Mh9iE1FJqC)-[hasCreatedWork]->(repurposed content piece: A piece of content that will be repurposed and reused), (Mh9iE1FJqC)-[hasActivity]->(social media interaction: Face-to-face like interaction through phone-based social media), (Mh9iE1FJqC)-[hasWorkIdentity]->(Real Estate Content Creator), (Mh9iE1FJqC)-[isPartOfOrganization]->(Sprout Social), (Mh9iE1FJqC)-[isPartOfOrganization]->(Sprout Social), (Mh9iE1FJqC)-[hasValue]->(Relationship Business: A business model focused on building and maintaining long-term relationships with customers rather than treating them as transactions), (Mh9iE1FJqC)-[hasValue]->(Relationship Business: A business model focused on building and maintaining long-term relationships with customers rather than treating them as transactions), (Mh9iE1FJqC)-[hasBelief]->(Social media misconception in real estate: Misconception that social media can replace personal interaction in real estate), (Mh9iE1FJqC)-[hasBelief]->(Social media misconception in real estate: Misconception that social media can replace personal interaction in real estate), (Mh9iE1FJqC)-[hasBelief]->(Social media misconception in real estate: Misconception that social media can replace personal interaction in real estate), (Mh9iE1FJqC)-[hasValue]->(Social engagement value: The importance of mutual engagement and reciprocity in social media interactions), (Mh9iE1FJqC)-[ownsObject]->(dedicated phone), (Mh9iE1FJqC)-[hasSkill]->(DigitalStrategySkill), (Mh9iE1FJqC)-[hasPersonalGoal]->(Marketing Education), (Mh9iE1FJqC)-[hasExperience]->(Facebook API Access Experience: Facebook API permissions being revoked), (Mh9iE1FJqC)-[hasSkill]->(Real Estate), (Mh9iE1FJqC)-[hasSkill]->(Real Estate), (Mh9iE1FJqC)-[hasSkill]->(Real Estate), (Mh9iE1FJqC)-[hasSkill]->(Real Estate), (Mh9iE1FJqC)-[hasExperience]->(Public Speaking Experience), (Mh9iE1FJqC)-[hasExperience]->(Public Speaking Experience), (Mh9iE1FJqC)-[hasExperience]->(Public Speaking Experience), (Mh9iE1FJqC)-[hasExperience]->(Public Speaking Experience), (Mh9iE1FJqC)-[hasPersonalGoal]->(Building Digital Presence), (Mh9iE1FJqC)-[hasValue]->(Marketing Repetition), (Mh9iE1FJqC)-[hasValue]->(Brand Consistency), (Mh9iE1FJqC)-[hasExperience]->(Content Publishing Experience: Experience with third party publishing and content creation), (Mh9iE1FJqC)-[hasBelief]->(Content Value Belief: Belief that valuable content and audience interest are more important than publishing platform), (Mh9iE1FJqC)-[isPartOfOrganization]->(Business Manager), (Mh9iE1FJqC)-[isPartOfOrganization]->(LinkedIn), (Mh9iE1FJqC)-[isPartOfOrganization]->(LinkedIn), (Mh9iE1FJqC)-[isPartOfOrganization]->(LinkedIn), (Mh9iE1FJqC)-[isPartOfOrganization]->(Twitter), (Mh9iE1FJqC)-[isPartOfOrganization]->(TikTok), (Mh9iE1FJqC)-[hasLocation]->(Radius Location: A geographical area defined by a radius around a city), (Mh9iE1FJqC)-[hasValue]->(Minimum Radius: The minimum radius value of 10 miles), (Mh9iE1FJqC)-[hasPsychologicalConcept]->(Reticular_Activating_System), (Mh9iE1FJqC)-[hasPsychologicalConcept]->(Fusiform_Gyrus), (Mh9iE1FJqC)-[hasBelief]->(Marketing requires repetition for effectiveness: Marketing needs to be repetitious to break through noise and gain attention), (Mh9iE1FJqC)-[hasValue]->(Marketing Consistency Value), (Mh9iE1FJqC)-[hasCreatedWork]->(Video Content), (Mh9iE1FJqC)-[hasCreatedWork]->(Instagram Reels), (Mh9iE1FJqC)-[hasCreatedWork]->(Micro Content), (Mh9iE1FJqC)-[hasPersonalGoal]->(Daily social media engagement goal: Block time every day for active participation in social media conversations), (Mh9iE1FJqC)-[hasWorkIdentity]->(CreatorProfile), (Mh9iE1FJqC)-[hasWorkIdentity]->(Content Manager), (Mh9iE1FJqC)-[hasActivity]->(Content Creation: Creating content with Instagram in mind for various formats including long form video, vertical short form videos, stories, and carousels), (Mh9iE1FJqC)-[hasWorkIdentity]->(Content Creation: Creating content with Instagram in mind for various formats including long form video, vertical short form videos, stories, and carousels), (Mh9iE1FJqC)-[hasActivity]->(Content Creation: Creating content with Instagram in mind for various formats including long form video, vertical short form videos, stories, and carousels), (Mh9iE1FJqC)-[hasActivity]->(Content Creation: Creating content with Instagram in mind for various formats including long form video, vertical short form videos, stories, and carousels), (Mh9iE1FJqC)-[hasActivity]->(Content Creation: Creating content with Instagram in mind for various formats including long form video, vertical short form videos, stories, and carousels), (Mh9iE1FJqC)-[hasActivity]->(Content Creation: Creating content with Instagram in mind for various formats including long form video, vertical short form videos, stories, and carousels), (Mh9iE1FJqC)-[hasActivity]->(Content Creation: Creating content with Instagram in mind for various formats including long form video, vertical short form videos, stories, and carousels), (Mh9iE1FJqC)-[hasActivity]->(Content Creation: Creating content with Instagram in mind for various formats including long form video, vertical short form videos, stories, and carousels), (Mh9iE1FJqC)-[hasSkill]->(Content Creation: Creating content with Instagram in mind for various formats including long form video, vertical short form videos, stories, and carousels), (Mh9iE1FJqC)-[hasActivity]->(Content Creation: Creating content with Instagram in mind for various formats including long form video, vertical short form videos, stories, and carousels), (Mh9iE1FJqC)-[hasCreatedWork]->(Polished Content), (Mh9iE1FJqC)-[hasWorkIdentity]->(Marketing Manager), (Mh9iE1FJqC)-[hasSkill]->(Campaign Optimization), (Mh9iE1FJqC)-[hasExperience]->(Real Estate Campaign Management), (Mh9iE1FJqC)-[hasPsychologicalConcept]->(Reticular Activating System: A process in the brain that calls attention to focused items), (Mh9iE1FJqC)-[hasPsychologicalConcept]->(Reticular Activating System: A process in the brain that calls attention to focused items), (Mh9iE1FJqC)-[hasPsychologicalConcept]->(Reticular Activating System: A process in the brain that calls attention to focused items), (Mh9iE1FJqC)-[hasPsychologicalConcept]->(Reticular Activating System: A process in the brain that calls attention to focused items), (Mh9iE1FJqC)-[hasPsychologicalConcept]->(Reticular Activating System: A process in the brain that calls attention to focused items), (Mh9iE1FJqC)-[hasPsychologicalConcept]->(Fusiform Gyrus: Brain region that activates when seeing faces and objects of expertise), (Mh9iE1FJqC)-[hasPsychologicalConcept]->(Fusiform Gyrus: Brain region that activates when seeing faces and objects of expertise), (Mh9iE1FJqC)-[hasPsychologicalConcept]->(Fusiform Gyrus: Brain region that activates when seeing faces and objects of expertise), (Mh9iE1FJqC)-[hasPsychologicalConcept]->(Fusiform Gyrus: Brain region that activates when seeing faces and objects of expertise), (Mh9iE1FJqC)-[hasPsychologicalConcept]->(Fusiform Gyrus: Brain region that activates when seeing faces and objects of expertise), (Mh9iE1FJqC)-[hasExperience]->(Marketing Exposure: Repeated exposure to marketing content), (Mh9iE1FJqC)-[hasExperience]->(Marketing Exposure: Repeated exposure to marketing content), (Mh9iE1FJqC)-[hasExperience]->(Marketing Exposure: Repeated exposure to marketing content), (Mh9iE1FJqC)-[hasCreatedWork]->(Blog Post), (Mh9iE1FJqC)-[hasPersonalGoal]->(Social media networking goal: Goal to actively participate in social media conversations daily), (Mh9iE1FJqC)-[hasActivity]->(Content Management), (Mh9iE1FJqC)-[hasActivity]->(Content Management), (Mh9iE1FJqC)-[hasActivity]->(Conversation Management), (Mh9iE1FJqC)-[hasActivity]->(Conversation Management), (Mh9iE1FJqC)-[hasActivity]->(Content Distribution), (Mh9iE1FJqC)-[hasActivity]->(Content Distribution), (Mh9iE1FJqC)-[hasSkill]->(Question Answering), (Mh9iE1FJqC)-[hasExperience]->(Call Connect Experience: 10-20% connect rate on outbound phone calls), (Mh9iE1FJqC)-[hasExperience]->(Content Creation Burnout: Getting burned out on content creation), (Mh9iE1FJqC)-[hasActivity]->(Content Following: Following and analyzing content from different accounts), (Mh9iE1FJqC)-[hasActivity]->(Follower Analysis: Analyzing followers and their interests), (Mh9iE1FJqC)-[hasSkill]->(engagement optimization), (Mh9iE1FJqC)-[hasSkill]->(alt text writing), (Mh9iE1FJqC)-[hasActivity]->(post editing), (Mh9iE1FJqC)-[hasActivity]->(community management: looking at all the engagement that has gone on so comments, messages, likes, shares all that and responding to it), (Mh9iE1FJqC)-[hasActivity]->(community management: looking at all the engagement that has gone on so comments, messages, likes, shares all that and responding to it), (Mh9iE1FJqC)-[hasActivity]->(Outbound Calling: Making outbound phone calls for lead follow-up), (Mh9iE1FJqC)-[hasActivity]->(Outbound Calling: Making outbound phone calls for lead follow-up), (Mh9iE1FJqC)-[hasExperience]->(Sales Follow-up Experience), (Mh9iE1FJqC)-[hasVulnerability]->(Time Management Challenge), (Mh9iE1FJqC)-[hasBelief]->(Search intent belief: Intent is more important than the number of keywords), (Mh9iE1FJqC)-[hasPsychologicalConcept]->(Search volume concept: Specific phrases may have high intent but low search volume), (Mh9iE1FJqC)-[hasRelationship]->(mentor-intern relationship), (Mh9iE1FJqC)-[hasPsychologicalConcept]->(Attention Span), (Mh9iE1FJqC)-[hasExperience]->(Content Consumption: People being inundated with content, scrolling continuously), (Mh9iE1FJqC)-[hasActivity]->(Engagement), (Mh9iE1FJqC)-[hasActivity]->(Engagement), (Mh9iE1FJqC)-[hasActivity]->(Social Networking: Strategic social networking and engagement with past clients and sphere of influence), (Mh9iE1FJqC)-[hasActivity]->(Social Networking: Strategic social networking and engagement with past clients and sphere of influence), (Mh9iE1FJqC)-[hasActivity]->(Commenting: Daily commenting on clients' and network contacts' content), (Mh9iE1FJqC)-[hasActivity]->(Messaging: Engaging through direct messaging with network contacts), (Mh9iE1FJqC)-[hasExperience]->(IGTV Experience: Experience with IGTV explore feed traffic and engagement), (Mh9iE1FJqC)-[hasValue]->(Automated Solutions: Tools available to help send messages, texts, emails, and voicemails automatically), (Mh9iE1FJqC)-[hasValue]->(Personalized Communication: Customized content rather than canned messages), (Mh9iE1FJqC)-[hasBelief]->(Market Understanding Belief: Understanding market conditions through supply and demand economics), (Mh9iE1FJqC)-[hasBelief]->(Search targeting knowledge: Knowledge about phrase match using quotations and exact match using brackets, including Google's handling of plurals in search), (Mh9iE1FJqC)-[hasValue]->(Best practice in search targeting: Target all singulars and plurals for complete coverage), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[isPartOfOrganization]->(Tom Ferry International), (Mh9iE1FJqC)-[hasWorkIdentity]->(Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Coach), (Mh9iE1FJqC)-[hasWorkIdentity]->(Speaker), (Mh9iE1FJqC)-[hasWorkIdentity]->(Speaker), (Mh9iE1FJqC)-[hasWorkIdentity]->(Speaker), (Mh9iE1FJqC)-[hasWorkIdentity]->(Speaker), (Mh9iE1FJqC)-[hasWorkIdentity]->(Speaker), (Mh9iE1FJqC)-[hasWorkIdentity]->(Speaker), (Mh9iE1FJqC)-[hasWorkIdentity]->(Speaker), (Mh9iE1FJqC)-[hasWorkIdentity]->(Speaker), (Mh9iE1FJqC)-[hasWorkIdentity]->(Speaker), (Mh9iE1FJqC)-[hasWorkIdentity]->(Speaker), (Mh9iE1FJqC)-[hasWorkIdentity]->(Speaker), (Mh9iE1FJqC)-[hasWorkIdentity]->(Speaker), (Mh9iE1FJqC)-[hasWorkIdentity]->(Speaker), (Mh9iE1FJqC)-[hasWorkIdentity]->(Speaker), (Mh9iE1FJqC)-[hasWorkIdentity]->(Speaker), (Mh9iE1FJqC)-[hasWorkIdentity]->(Speaker), (Mh9iE1FJqC)-[hasWorkIdentity]->(Speaker), (Mh9iE1FJqC)-[hasSkill]->(Digital Marketing), (Mh9iE1FJqC)-[hasSkill]->(Digital Marketing), (Mh9iE1FJqC)-[hasActivity]->(Digital Marketing), (Mh9iE1FJqC)-[hasSkill]->(Digital Marketing), (Mh9iE1FJqC)-[hasSkill]->(Digital Marketing), (Mh9iE1FJqC)-[hasPersonalGoal]->(Digital Marketing), (Mh9iE1FJqC)-[hasSkill]->(Digital Marketing), (Mh9iE1FJqC)-[hasSkill]->(Digital Marketing), (Mh9iE1FJqC)-[hasSkill]->(Digital Marketing), (Mh9iE1FJqC)-[hasSkill]->(Digital Marketing), (Mh9iE1FJqC)-[hasSkill]->(Digital Marketing), (Mh9iE1FJqC)-[hasActivity]->(Digital Marketing), (Mh9iE1FJqC)-[hasSkill]->(Digital Marketing), (Mh9iE1FJqC)-[hasSkill]->(Digital Marketing), (Mh9iE1FJqC)-[hasSkill]->(Digital Marketing), (Mh9iE1FJqC)-[hasActivity]->(Digital Marketing), (Mh9iE1FJqC)-[hasSkill]->(Digital Marketing), (Mh9iE1FJqC)-[hasSkill]->(Digital Marketing), (Mh9iE1FJqC)-[hasPersonalGoal]->(Digital Marketing), (Mh9iE1FJqC)-[hasSkill]->(Digital Marketing), (Mh9iE1FJqC)-[hasSkill]->(Digital Marketing), (Mh9iE1FJqC)-[hasSkill]->(Digital Marketing), (Mh9iE1FJqC)-[hasSkill]->(Digital Marketing), (Mh9iE1FJqC)-[hasSkill]->(Digital Marketing), (Mh9iE1FJqC)-[hasSkill]->(Digital Marketing), (Mh9iE1FJqC)-[hasActivity]->(Project-based Consulting), (Mh9iE1FJqC)-[hasActivity]->(Project-based Consulting), (Mh9iE1FJqC)-[hasActivity]->(Project-based Consulting), (Intern)-[hasWorkIdentity]->(internship role), (Intern)-[hasExperience]->(internship learning experience), (Real Estate Professional)-[hasWorkIdentity]->(Instagram Business Profile), (Google search campaign: Running ads campaign on Google requiring keyword analysis)-[hasSkill]->(Keyword Analysis), (Liberty Mutual)-[isPartOfOrganization]->(Advertisement Experience: 6 second non-skippable bumper ads), (Online Property Search Experience)-[hasActivity]->(Neighborhood visit: 43% of people drive to see the neighborhood as their first activity), (Online Property Search Experience)-[hasActivity]->(Property viewing: Meeting to view properties or get consultation), (Jesse)-[hasWorkIdentity]->(Consistent Real Estate Agent), (Jesse)-[hasValue]->(Consistency), (Jesse)-[hasExperience]->(Home Viewing Experience: Average of 10 homes viewed before finding one), (Tom Perry)-[hasWorkIdentity]->(Business Coach), (Tom Perry)-[hasLocation]->(Orange County), (Gen Z)-[hasSkill]->(Social Media Management: Managing and analyzing social media content and engagement), (Gen Z)-[isPartOfOrganization]->(LinkedIn), (Creator Account)-[hasActivity]->(Music Licensing), (Business Account)-[hasActivity]->(Third Party Posting), (Tay DeCarlo)-[hasActivity]->(Video Creation), (Chris Benjamin)-[hasActivity]->(Video Creation), (Glenda Baker)-[hasActivity]->(Video Creation), (solo agent)-[hasWorkIdentity]->(AgentWorkIdentity), (solo agent)-[hasActivity]->(deal closing), (Josh)-[hasCreatedWork]->(Website), (Website)-[hasCreatedWork]->(Blog), (Website)-[hasCreatedWork]->(Articles), (Website)-[hasCreatedWork]->(quote card), (Andrew Can)-[isPartOfOrganization]->(Two Buddy), (California Association of Realtors)-[isPartOfOrganization]->(Real Estate Industry), (Coke)-[isPartOfOrganization]->(CokeMachine), (15-second skippable video ad: A skippable video advertisement that can be skipped after 5 seconds)-[isPartOfOrganization]->(YouTube), (YouTube)-[isPartOfOrganization]->(Google), (YouTube)-[isPartOfOrganization]->(Social Media Platforms), (5-second non-skippable video ad: A non-skippable video advertisement that appears before or during YouTube videos)-[isPartOfOrganization]->(YouTube), (Consumer)-[hasPsychologicalConcept]->(Online Inquiry), (Consumer)-[hasPsychologicalConcept]->(Call Behavior), (Consumer)-[hasPsychologicalConcept]->(Text Behavior), (Interviewer)-[hasSkill]->(Google Search: Using plus symbols before keywords for broad match modifier in Google search), (Interviewer)-[isPartOfOrganization]->(Google), (Interviewer)-[hasExperience]->(Discovery_Experience: Not super applicable to real estate), (Interviewer)-[hasBelief]->(Response rate importance belief: Response rate is important for local services), (Interviewer)-[isPartOfOrganization]->(Local Services), (Interviewer)-[hasPsychologicalConcept]->(Search Matching Concept: Understanding of exact and modified broad match concepts in search queries), (Interviewer)-[hasSkill]->(Search Keyword Matching), (Interviewer)-[hasBelief]->(Public Instagram Profile Belief: Instagram profiles should be public and business accounts for real estate professionals), (Interviewer)-[hasExperience]->(Google Analysis Experience: Google doesn't provide much information on spending predictions until actual spending occurs), (Instagram)-[isPartOfOrganization]->(Social Media Platforms), (Courtney Gracia)-[isPartOfOrganization]->(Tom), (Courtney Gracia)-[isPartOfOrganization]->(Barry International), (Courtney Gracia)-[hasActivity]->(Social Media Posting), (Courtney Gracia)-[hasActivity]->(Email Checking), (Courtney Gracia)-[hasActivity]->(Comment Responding), (Courtney Gracia)-[hasWorkIdentity]->(Social Media Manager), (Courtney Gracia)-[hasWorkIdentity]->(Social Media Manager), (Courtney Gracia)-[isPartOfOrganization]->(Tom Ferry Organization), (Courtney Gracia)-[isPartOfOrganization]->(Tom Ferry Organization), (Courtney Gracia)-[hasWorkIdentity]->(CourtneyGraciaWorkIdentity), (Courtney Gracia)-[hasActivity]->(Social Media Marketing), (Courtney Gracia)-[hasActivity]->(Hashtag Strategy: Using hashtags with less than a million occurrences and including essential industry-specific tags), (Courtney Gracia)-[hasActivity]->(Engagement Strategy), (Courtney Gracia)-[hasSkill]->(Content Creation: Creating content with Instagram in mind for various formats including long form video, vertical short form videos, stories, and carousels), (Tom Ferry International)-[isPartOfOrganization]->(Tom Ferry Organization), (Tom Ferry International)-[hasCreatedWork]->(Tom Ferry Show), (Tom Ferry International)-[hasActivity]->(Speaking), (Tom Ferry International)-[isPartOfOrganization]->(Elite retreat), (Jessie Beaudoin)-[isPartOfOrganization]->(Call Action), (Jessie Beaudoin)-[hasSkill]->(MarketingSkill), (Jesse Beauwine)-[isPartOfOrganization]->(Call Action), (Jesse Beauwine)-[hasExperience]->(Real Estate Experience), (Jesse Beauwine)-[hasLocation]->(California), (Jesse Beauwine)-[hasWorkIdentity]->(Real Estate Agent), (Josh Frankel)-[hasSkill]->(Google Local Services Ads), (Josh Frankel)-[hasSkill]->(PPC Campaigns), (Josh Frankel)-[isPartOfOrganization]->(Green Light Technology Solutions), (Josh Frankel)-[isPartOfOrganization]->(Green Light Technology Solutions), (Josh Frankel)-[isPartOfOrganization]->(Wylopo), (Josh Frankel)-[isPartOfOrganization]->(Wylopo), (Josh Frankel)-[hasWorkIdentity]->(PPC Expert), (Josh Frankel)-[hasWorkIdentity]->(PPC Expert), (Google Local Services Ads)-[isPartOfOrganization]->(Google), (Google)-[hasCreatedWork]->(Google Search: Using plus symbols before keywords for broad match modifier in Google search), (Google)-[hasCreatedWork]->(YouTube Ads: Video advertising on YouTube platform), (Google)-[hasWorkIdentity]->(Marketing Perspective), (Google)-[hasActivity]->(Smart Campaign: Auto-generated advertising campaigns that create ads, choose keywords, and write ad text automatically), (Google)-[hasCreatedWork]->(Google Display Network: Banner ads with text and lightweight motion videos shown across the web), (Google)-[hasCreatedWork]->(Google Shopping: E-commerce direct to consumer advertising), (Local Service Ads: They are not new for Google, but they are new for this industry, and it's we've seen a good boost for seller intent leads using those.)-[isPartOfOrganization]->(Google), (Google My Business: Business listing with address, pictures, and contact information on Google search)-[isPartOfOrganization]->(Google), (Agent)-[hasActivity]->(Google My Business: Business listing with address, pictures, and contact information on Google search), (Agent)-[hasActivity]->(Local Service Ads: They are not new for Google, but they are new for this industry, and it's we've seen a good boost for seller intent leads using those.), (Agent)-[isPartOfOrganization]->(Google), (Tom)-[hasLocation]->(Dallas), (Tom)-[hasActivity]->(posting stories), (Tom)-[hasActivity]->(Shoot Days), (Tom)-[hasCreatedWork]->(Podcast), (Tom)-[hasActivity]->(Content Creation: Creating content with Instagram in mind for various formats including long form video, vertical short form videos, stories, and carousels), (Jessie B)-[isPartOfOrganization]->(Call Action), (Jessie B)-[isPartOfOrganization]->(Call Action), (Jessie B)-[hasWorkIdentity]->(JessieB_CEO), (Jessie B)-[hasExperience]->(Real Estate Experience), (Jessie B)-[hasExperience]->(Real Estate Experience), (Jessie B)-[hasWorkIdentity]->(Tech Company Founder), (Jason Pantana)-[isPartOfOrganization]->(Marketing Stream), (Jason Pantana)-[isPartOfOrganization]->(Marketing Stream), (Call Action)-[isPartOfOrganization]->(Facebook)
+        `;
+
+        // --- Global Variables ---
+        let scene, camera, renderer, labelRenderer, directionalLight; // Removed groundPlane from here
+        let controls;
+        const nodes = new Map();
+        const edges = [];
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        let intersectedNodeMesh;
+        const tooltip = document.getElementById('tooltip');
+        const nodeObjects = [];
+
+        let nodeGeometry; // Shared geometry for nodes
+        let nodeMaterial; // Base material for nodes, will be cloned.
+
+        const LABEL_OFFSET = 0.4;
+        const HOVER_EMISSIVE_COLOR = 0x333333;
+
+        // --- Control Panel Elements ---
+        const nodeSizeSlider = document.getElementById('nodeSize');
+        const nodeColorPicker = document.getElementById('nodeColor');
+        const showLabelsCheckbox = document.getElementById('showLabels');
+        const layoutSpreadSlider = document.getElementById('layoutSpread');
+
+        // --- Color Management for Relationships ---
+        const relationshipColorMap = new Map();
+        const predefinedColors = [
+            0x55aaff, 0xff884d, 0x55d455, 0xff5555, 0xaa77ff, 0xccaa44,
+            0xff77cc, 0x888888, 0xdddd55, 0x44dddd, 0xaaccff, 0xffccaa,
+            0xaaffaa, 0xffaaaa, 0xddbbff, 0xeedd88, 0xffbbdd, 0xbbbbbb,
+            0xeeee99, 0x99eeee
+        ];
+        let nextColorIndex = 0;
+
+        function getColorForRelationship(relationship) {
+            if (!relationshipColorMap.has(relationship)) {
+                relationshipColorMap.set(relationship, predefinedColors[nextColorIndex % predefinedColors.length]);
+                nextColorIndex++;
+            }
+            return relationshipColorMap.get(relationship);
+        }
+
+        // --- Initialization ---
+        function init() {
+            scene = new THREE.Scene();
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = parseFloat(layoutSpreadSlider.value) * 2.0;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild(renderer.domElement);
+
+            labelRenderer = new THREE.CSS2DRenderer();
+            labelRenderer.setSize(window.innerWidth, window.innerHeight);
+            labelRenderer.domElement.style.position = 'absolute';
+            labelRenderer.domElement.style.top = '0px';
+            labelRenderer.domElement.style.pointerEvents = 'none';
+            document.body.appendChild(labelRenderer.domElement);
+
+            // Lighting
+            const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x555555, 0.9);
+            hemisphereLight.position.set(0, 50, 0);
+            scene.add(hemisphereLight);
+
+            directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(40, 70, 50);
+            directionalLight.castShadow = true; // Light will cast shadows
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            directionalLight.shadow.camera.near = 10;
+            directionalLight.shadow.camera.far = 200;
+            scene.add(directionalLight);
+            scene.add(directionalLight.target);
+            directionalLight.target.position.set(0, 0, 0);
+
+            // Ground plane REMOVED
+            // const planeGeometry = new THREE.PlaneGeometry(500, 500);
+            // const planeMaterial = new THREE.ShadowMaterial({ opacity: 0.35 });
+            // groundPlane = new THREE.Mesh(planeGeometry, planeMaterial);
+            // groundPlane.rotation.x = -Math.PI / 2;
+            // groundPlane.receiveShadow = true; // This would receive shadows
+            // scene.add(groundPlane);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.04;
+            controls.minDistance = 3;
+            controls.maxDistance = 150;
+            controls.screenSpacePanning = false;
+
+            nodeMaterial = new THREE.MeshStandardMaterial({
+                color: nodeColorPicker.value,
+                metalness: 0.4,
+                roughness: 0.5,
+                transparent: true,
+                opacity: 0.95
+            });
+            nodeGeometry = new THREE.SphereGeometry(parseFloat(nodeSizeSlider.value), 24, 24);
+
+            parseData(dataString);
+            createGraph();
+
+            window.addEventListener('resize', onWindowResize, false);
+            renderer.domElement.addEventListener('mousemove', onDocumentMouseMove, false);
+            renderer.domElement.addEventListener('click', onDocumentMouseClick, false);
+
+            nodeSizeSlider.addEventListener('input', updateNodeSize);
+            nodeColorPicker.addEventListener('input', updateNodeColor);
+            showLabelsCheckbox.addEventListener('change', toggleLabelsVisibility);
+            layoutSpreadSlider.addEventListener('input', updateLayoutSpread);
+
+            animate();
+        }
+
+        // --- Data Parsing (Identical) ---
+        function parseData(dataStr) {
+            nodes.clear(); edges.length = 0; relationshipColorMap.clear(); nextColorIndex = 0;
+            const uniqueNodeIds = new Set(); const rawEdges = [];
+            const statements = dataStr.trim().split(/,\s*(?=\()/);
+            statements.forEach(stmt => {
+                const match = stmt.match(/\((.*?)\)-\[(.*?)\]->\((.*?)\)/);
+                if (match) {
+                    const sourceId = match[1].trim(); const relationship = match[2].trim(); const targetId = match[3].trim();
+                    uniqueNodeIds.add(sourceId); uniqueNodeIds.add(targetId);
+                    rawEdges.push({ source: sourceId, target: targetId, relationship });
+                }
+            });
+            uniqueNodeIds.forEach(nodeId => {
+                nodes.set(nodeId, { id: nodeId, connections: 0, mesh: null, label: null, originalEmissive: 0x000000 });
+            });
+            rawEdges.forEach(edgeInfo => {
+                edges.push({
+                    sourceId: edgeInfo.source, targetId: edgeInfo.target, relationship: edgeInfo.relationship,
+                    line: null, label: null, material: null
+                });
+                if (nodes.has(edgeInfo.source)) nodes.get(edgeInfo.source).connections++;
+                if (nodes.has(edgeInfo.target)) nodes.get(edgeInfo.target).connections++;
+            });
+        }
+
+        // --- Update Shadow Camera Bounds ---
+        function updateShadowCameraBounds() {
+            const spread = parseFloat(layoutSpreadSlider.value);
+            const cam = directionalLight.shadow.camera;
+            // Adjust frustum to tightly contain the graph based on spread
+            // This helps in making shadow map resolution more effective for the objects
+            const frustumSize = spread * 1.2 + Math.max(...Array.from(nodes.values()).map(n => n.mesh ? n.mesh.geometry.parameters.radius : 0)) * 2;
+            cam.left = -frustumSize;
+            cam.right = frustumSize;
+            cam.top = frustumSize;
+            cam.bottom = -frustumSize;
+            cam.updateProjectionMatrix();
+        }
+
+
+        // --- Graph Creation/Re-creation ---
+        function createGraph() {
+            clearSceneGraph();
+
+            const spread = parseFloat(layoutSpreadSlider.value);
+            const currentGlobalNodeRadius = nodeGeometry.parameters.radius;
+
+            // Ground plane positioning logic REMOVED
+            // groundPlane.position.y = -spread - currentGlobalNodeRadius - 0.5;
+
+            nodes.forEach(nodeData => {
+                const meshMaterial = nodeMaterial.clone();
+                const mesh = new THREE.Mesh(nodeGeometry, meshMaterial);
+
+                const phi = Math.acos(-1 + (2 * Math.random()));
+                const theta = Math.sqrt(nodes.size * Math.PI) * phi * 0.5;
+                mesh.position.set(
+                    spread * Math.cos(theta) * Math.sin(phi),
+                    spread * Math.sin(theta) * Math.sin(phi),
+                    spread * Math.cos(phi)
+                );
+                mesh.castShadow = true; // Nodes still cast shadows
+                mesh.receiveShadow = true; // Nodes can receive shadows from other nodes (more subtle)
+                nodeData.originalEmissive = mesh.material.emissive ? mesh.material.emissive.getHex() : 0x000000;
+                mesh.userData = { id: nodeData.id, type: 'node', originalEmissive: nodeData.originalEmissive };
+
+                scene.add(mesh);
+                nodeData.mesh = mesh;
+                nodeObjects.push(mesh);
+
+                const nodeLabelDiv = document.createElement('div');
+                nodeLabelDiv.className = 'node-label';
+                nodeLabelDiv.textContent = nodeData.id;
+                nodeLabelDiv.style.visibility = showLabelsCheckbox.checked ? 'visible' : 'hidden';
+                const nodeLabel = new THREE.CSS2DObject(nodeLabelDiv);
+                nodeLabel.position.set(0, currentGlobalNodeRadius + LABEL_OFFSET, 0);
+                mesh.add(nodeLabel);
+                nodeData.label = nodeLabel;
+            });
+
+            edges.forEach(edgeData => {
+                const sourceNode = nodes.get(edgeData.sourceId);
+                const targetNode = nodes.get(edgeData.targetId);
+                if (sourceNode && sourceNode.mesh && targetNode && targetNode.mesh) {
+                    const edgeColor = getColorForRelationship(edgeData.relationship);
+                    edgeData.material = new THREE.LineBasicMaterial({
+                        color: edgeColor, linewidth: 2, transparent: true, opacity: 0.75
+                    });
+                    const points = [sourceNode.mesh.position, targetNode.mesh.position];
+                    const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+                    const line = new THREE.Line(lineGeometry, edgeData.material);
+                    scene.add(line);
+                    edgeData.line = line;
+
+                    const edgeLabelDiv = document.createElement('div');
+                    edgeLabelDiv.className = 'edge-label';
+                    edgeLabelDiv.textContent = edgeData.relationship;
+                    edgeLabelDiv.style.visibility = showLabelsCheckbox.checked ? 'visible' : 'hidden';
+                    edgeLabelDiv.style.color = new THREE.Color(edgeColor).offsetHSL(0, 0, 0.2).getStyle();
+                    const edgeLabel = new THREE.CSS2DObject(edgeLabelDiv);
+                    edgeLabel.position.copy(sourceNode.mesh.position).lerp(targetNode.mesh.position, 0.5);
+                    scene.add(edgeLabel);
+                    edgeData.label = edgeLabel;
+                }
+            });
+            updateShadowCameraBounds();
+        }
+
+        // --- Helper to Clear Scene Graph Objects (Identical) ---
+        function clearSceneGraph() {
+            nodeObjects.length = 0;
+            nodes.forEach(nodeData => {
+                if (nodeData.mesh) {
+                    if (nodeData.label) {
+                        nodeData.label.removeFromParent();
+                        nodeData.label.element.remove();
+                    }
+                    scene.remove(nodeData.mesh);
+                    nodeData.mesh.material.dispose();
+                }
+                nodeData.mesh = null; nodeData.label = null;
+            });
+            edges.forEach(edgeData => {
+                if (edgeData.line) {
+                    scene.remove(edgeData.line);
+                    edgeData.line.geometry.dispose();
+                    if (edgeData.material) edgeData.material.dispose();
+                }
+                if (edgeData.label) {
+                    scene.remove(edgeData.label);
+                    edgeData.label.element.remove();
+                }
+                edgeData.line = null; edgeData.label = null; edgeData.material = null;
+            });
+        }
+
+        // --- Event Handlers (Identical) ---
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            labelRenderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function onDocumentMouseMove(event) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(nodeObjects, false);
+            if (intersects.length > 0) {
+                const firstIntersected = intersects[0].object;
+                if (intersectedNodeMesh !== firstIntersected) {
+                    if (intersectedNodeMesh) {
+                        intersectedNodeMesh.material.emissive.setHex(intersectedNodeMesh.userData.originalEmissive);
+                    }
+                    intersectedNodeMesh = firstIntersected;
+                    intersectedNodeMesh.userData.originalEmissive = nodes.get(intersectedNodeMesh.userData.id).originalEmissive;
+                    intersectedNodeMesh.material.emissive.setHex(HOVER_EMISSIVE_COLOR);
+                    tooltip.style.display = 'block';
+                    updateTooltipContent(intersectedNodeMesh.userData.id);
+                }
+                tooltip.style.left = Math.min(event.clientX + 15, window.innerWidth - tooltip.offsetWidth - 15) + 'px';
+                tooltip.style.top = Math.min(event.clientY + 15, window.innerHeight - tooltip.offsetHeight - 15) + 'px';
+            } else {
+                if (intersectedNodeMesh) {
+                    intersectedNodeMesh.material.emissive.setHex(intersectedNodeMesh.userData.originalEmissive);
+                }
+                intersectedNodeMesh = null;
+                tooltip.style.display = 'none';
+            }
+        }
+
+        function updateTooltipContent(nodeId) {
+            const nodeData = nodes.get(nodeId);
+            if (!nodeData) {
+                tooltip.innerHTML = `<h4>Node: ${nodeId}</h4><p>No additional data.</p>`; return;
+            }
+            let out = '<h5>Outgoing:</h5><ul>', inc = '<h5>Incoming:</h5><ul>';
+            let outC = 0, inC = 0;
+            edges.forEach(e => {
+                if (e.sourceId === nodeId) { out += `<li>-[${e.relationship}]-> (${e.targetId})</li>`; outC++; }
+                if (e.targetId === nodeId) { inc += `<li><-[${e.relationship}]- (${e.sourceId})</li>`; inC++; }
+            });
+            if (outC === 0) out += '<li>None</li>'; if (inC === 0) inc += '<li>None</li>';
+            out += '</ul>'; inc += '</ul>';
+            tooltip.innerHTML = `<h4>Node: ${nodeId}</h4>${out}${inc}`;
+        }
+
+        function onDocumentMouseClick(event) {
+            if (intersectedNodeMesh) console.log("Clicked Node ID:", intersectedNodeMesh.userData.id);
+        }
+
+        // --- Control Panel Update Functions ---
+        function updateNodeSize() {
+            const newRadius = parseFloat(nodeSizeSlider.value);
+            if (nodeGeometry) nodeGeometry.dispose();
+            nodeGeometry = new THREE.SphereGeometry(newRadius, 24, 24);
+
+            // Ground plane positioning logic REMOVED
+            // const currentSpread = parseFloat(layoutSpreadSlider.value);
+            // groundPlane.position.y = -currentSpread - newRadius - 0.5;
+
+            nodes.forEach(nodeData => {
+                if (nodeData.mesh) {
+                    nodeData.mesh.geometry = nodeGeometry;
+                    if (nodeData.label) {
+                        nodeData.label.position.set(0, newRadius + LABEL_OFFSET, 0);
+                    }
+                }
+            });
+            updateShadowCameraBounds();
+        }
+
+        function updateNodeColor() {
+            const newColorHex = nodeColorPicker.value;
+            nodeMaterial.color.set(newColorHex);
+            nodes.forEach(nodeData => {
+                if (nodeData.mesh && nodeData.mesh.material) {
+                     nodeData.mesh.material.color.set(newColorHex);
+                }
+            });
+        }
+
+        function toggleLabelsVisibility() {
+            const visible = showLabelsCheckbox.checked;
+            nodes.forEach(nodeData => {
+                if (nodeData.label && nodeData.label.element) nodeData.label.element.style.visibility = visible ? 'visible' : 'hidden';
+            });
+            edges.forEach(edgeData => {
+                if (edgeData.label && edgeData.label.element) edgeData.label.element.style.visibility = visible ? 'visible' : 'hidden';
+            });
+        }
+
+        function updateLayoutSpread() {
+            createGraph(); // This also calls updateShadowCameraBounds
+        }
+
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            render();
+        }
+
+        function render() {
+            renderer.render(scene, camera);
+            labelRenderer.render(scene, camera);
+        }
+
+        // --- Start Application ---
+        window.onload = function() {
+            init();
+        };
+    </script>
+</body>
+</html>
